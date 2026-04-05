@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+.eggs/
+pip-wheel-metadata/
+*.egg
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# Data files — never commit raw data or Parquet outputs
+data/raw/
+data/processed/
+*.parquet
+*.csv
+*.json.gz
+
+# Watermark state (local dev only, managed in ADLS in prod)
+.watermarks/
+
+# Azure / cloud credentials
+.azure/
+azure.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# mypy
+.mypy_cache/
