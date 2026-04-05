@@ -1,0 +1,127 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# api-to-datalake  |  Source Configuration
+#
+# Adding a new source: copy one of the blocks below, give it a unique key,
+# and set the fields that apply. No Python code changes required.
+#
+# Supported types:   rest | jdbc
+# Supported auth:    api_key | bearer | basic
+# Pagination types:  none | offset | cursor | next_url
+# Schedules:         daily | hourly | weekly
+# ─────────────────────────────────────────────────────────────────────────────
+
+sources:
+
+  # ── Exchange Rates (OpenExchangeRates REST API) ──────────────────────────────
+  exchange_rates:
+    type: rest
+    description: "Daily FX rates from OpenExchangeRates. ~170 currency pairs vs USD."
+    url: "https://openexchangerates.org/api/latest.json"
+
+    auth:
+      type: api_key
+      param_name: app_id           # appended as ?app_id=<value>
+      token_env: API_KEY_OPENEXCHANGERATES
+
+    pagination:
+      type: none                   # single-page response
+
+    incremental:
+      enabled: false               # full snapshot every run (small payload)
+
+    response_mapping:
+      # top-level fields to flatten into rows
+      # "rates" is a dict {currency: rate} — framework expands it to rows
+      root_key: rates
+      timestamp_field: timestamp   # epoch seconds, auto-converted to UTC datetime
+
+    schedule: daily
+    target_path: raw/exchange_rates
+
+    # Extra static columns added to every row
+    metadata:
+      base_currency: USD
+      provider: openexchangerates
+
+
+  # ── Bank Transactions (SQL Server via JDBC / pyodbc) ─────────────────────────
+  bank_transactions:
+    type: jdbc
+    description: "Core banking transactions — incremental load based on created_at."
+
+    connection:
+      driver: "{ODBC Driver 18 for SQL Server}"
+      host_env: JDBC_HOST
+      port_env: JDBC_PORT
+      database_env: JDBC_DATABASE
+      user_env: JDBC_USER
+      password_env: JDBC_PASSWORD
+      # extra driver options appended to connection string
+      options:
+        Encrypt: "yes"
+        TrustServerCertificate: "no"
+        Connection Timeout: "30"
+
+    query:
+      table: dbo.transactions
+      columns:
+        - transaction_id
+        - account_id
+        - counterparty_account
+        - amount
+        - currency
+        - transaction_type       # CREDIT | DEBIT | TRANSFER | FEE
+        - status                 # PENDING | SETTLED | REVERSED | FAILED
+        - reference_code
+        - value_date
+        - created_at
+        - updated_at
+
+    incremental:
+      enabled: true
+      watermark_column: created_at   # SQL column used in WHERE clause
+      watermark_type: datetime       # datetime | integer | string
+      # Initial watermark if none stored (ISO 8601 or epoch int)
+      default_watermark: "2020-01-01T00:00:00"
+
+    batch_size: 5000               # rows per chunk (chunked reads)
+    schedule: daily
+    target_path: raw/transactions
+
+
+  # ── Account Events (Internal REST API, cursor pagination) ────────────────────
+  account_events:
+    type: rest
+    description: "Account lifecycle events — KYC updates, status changes, limits."
+    url: "https://api.internal.bank/v2/account-events"
+
+    auth:
+      type: bearer
+      token_env: API_BEARER_ACCOUNT_EVENTS
+
+    pagination:
+      type: cursor                   # response includes next_cursor field
+      cursor_response_field: meta.next_cursor
+      cursor_request_param: cursor
+      page_size: 200
+      page_size_param: limit
+
+    incremental:
+      enabled: true
+      watermark_field: event_timestamp   # JSON field in each record
+      watermark_type: iso8601            # iso8601 | epoch_ms | epoch_s
+      default_watermark: "2020-01-01T00:00:00Z"
+      # When paginating, stop fetching pages once records are older than watermark
+      stop_on_watermark: true
+
+    response_mapping:
+      root_key: data               # array of event objects
+      timestamp_field: event_timestamp
+
+    # Rate limiting — honour Retry-After header from 429 responses
+    rate_limit:
+      respect_retry_after: true
+      max_wait_seconds: 60
+
+    schedule: daily
+    target_path: raw/account_events
