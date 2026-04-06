@@ -56,7 +56,7 @@ Pull data from **REST APIs** and **JDBC sources**, land it in **Azure Data Lake 
 ## Config-Driven Approach
 
 Every ingestion source is described as a YAML block in `config/sources.yaml`.  
-**Adding a new source requires zero code changes** — only a new YAML entry.
+**Adding a new source requires zero code changes**, only a new YAML entry.
 
 ### Anatomy of a source config
 
